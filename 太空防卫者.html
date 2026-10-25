@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>太空防卫者 全新UI版</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Segoe UI,Microsoft YaHei,sans-serif}
+body{
+    background:#040717;
+    color:#e2e8f0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    min-height:100vh;
+    padding:20px;
+    overflow:hidden;
+    background-image: 
+        radial-gradient(2px 2px at 20px 30px,#ffffff22,transparent),
+        radial-gradient(2px 2px at 40px 70px,#ffffff18,transparent),
+        radial-gradient(1px 1px at 90px 40px,#ffffff25,transparent);
+    background-repeat:repeat;
+    background-size:120px 120px;
+}
+
+/* 主标题 */
+.game-title{
+    font-size:36px;
+    font-weight:bold;
+    background:linear-gradient(90deg,#38bdf8,#a855f7,#ec4899);
+    -webkit-background-clip:text;
+    color:transparent;
+    margin-bottom:12px;
+    text-shadow: 0 0 24px #a855f744;
+    letter-spacing:4px;
+}
+
+/* HUD信息栏 */
+#infoBar{
+    display:flex;
+    gap:48px;
+    font-size:20px;
+    margin-bottom:12px;
+    align-items:center;
+    background:rgba(25,35,65,0.65);
+    border:1px solid #38bdf844;
+    padding:10px 28px;
+    border-radius:12px;
+    box-shadow:0 0 18px #38bdf822;
+}
+.hud-item{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+#hpBarWrap{
+    width:120px;
+    height:14px;
+    background:#111827;
+    border-radius:7px;
+    border:1px solid #ef444460;
+    overflow:hidden;
+}
+#hpBar{
+    height:100%;
+    background:linear-gradient(90deg,#ef4444,#fb7185);
+    transition:width 0.25s;
+}
+#buffText{
+    color:#fb923c;
+    font-size:18px;
+    animation:pulse 1s infinite alternate;
+}
+@keyframes pulse{
+    from{opacity:0.7;}
+    to{opacity:1;}
+}
+
+/* 游戏画布容器 */
+.canvas-wrap{
+    position:relative;
+}
+#gameCanvas{
+    border-radius:16px;
+    box-shadow:0 0 40px #38bdf840,inset 0 0 60px #0009;
+    border:2px solid #38bdf845;
+    cursor:crosshair;
+    background:#020612;
+}
+
+/* 遮罩通用样式：开始、结束弹窗 */
+.mask{
+    position:absolute;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(4,7,23,0.88);
+    border-radius:16px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    z-index:10;
+}
+.mask h2{
+    font-size:34px;
+    background:linear-gradient(90deg,#38bdf8,#a855f7);
+    -webkit-background-clip:text;
+    color:transparent;
+    margin-bottom:16px;
+}
+.mask-desc{
+    color:#94a3b8;
+    margin-bottom:24px;
+    text-align:center;
+    line-height:1.8;
+}
+.sci-btn{
+    padding:12px 32px;
+    font-size:18px;
+    border:none;
+    border-radius:10px;
+    background:linear-gradient(135deg,#2563eb,#7c3aed);
+    color:#fff;
+    cursor:pointer;
+    transition:0.25s;
+    box-shadow:0 0 14px #7c3aed55;
+}
+.sci-btn:hover{
+    transform:scale(1.04);
+    box-shadow:0 0 22px #7c3aed77;
+}
+#gameEndMask{
+    display:none;
+}
+#startMask{
+    display:flex;
+}
+
+#tip{
+    margin-top:14px;
+    color:#94a3b8;
+    font-size:14px;
+    max-width:820px;
+    text-align:center;
+    line-height:1.6;
+}
+#restartBtn{
+    margin-top:12px;
+}
+</style>
+</head>
+<body>
+<h1 class="game-title">太空防卫者</h1>
+<div id="infoBar">
+    <div class="hud-item">分数：<span id="score">0</span></div>
+    <div class="hud-item">
+        生命：
+        <div id="hpBarWrap">
+            <div id="hpBar" style="width:100%"></div>
+        </div>
+        <span id="hp">3</span>
+    </div>
+    <div id="buffText"></div>
+</div>
+
+<div class="canvas-wrap">
+    <canvas id="gameCanvas" width="800" height="520"></canvas>
+
+    <!-- 开始遮罩 -->
+    <div id="startMask" class="mask">
+        <h2>🚀太空防卫者</h2>
+        <div class="mask-desc">
+WASD 移动飞船<br/>
+鼠标瞄准，左键发射子弹<br/>
+紫色敌人逃跑会扣血<br/>
+🔴红色道具回血 | 🔵蓝色道具武器强化
+        </div>
+        <button class="sci-btn" id="startGameBtn">开始游戏</button>
+    </div>
+
+    <!-- 游戏结束遮罩 -->
+    <div id="gameEndMask" class="mask">
+        <h2>💥游戏结束</h2>
+        <div class="mask-desc">
+你的得分：<span id="finalScore">0</span>
+        </div>
+        <button class="sci-btn" id="endRestartBtn">再来一局</button>
+    </div>
+</div>
+
+<div id="tip">提示：阻止敌人逃离屏幕底部！合理拾取道具生存更久</div>
+<button id="restartBtn" class="sci-btn">重新开始</button>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const scoreDom = document.getElementById("score");
+const hpDom = document.getElementById("hp");
+const hpBarDom = document.getElementById("hpBar");
+const buffDom = document.getElementById("buffText");
+const restartBtn = document.getElementById("restartBtn");
+const startMask = document.getElementById("startMask");
+const gameEndMask = document.getElementById("gameEndMask");
+const startGameBtn = document.getElementById("startGameBtn");
+const endRestartBtn = document.getElementById("endRestartBtn");
+const finalScoreDom = document.getElementById("finalScore");
+
+//玩家
+const player = {
+    x: canvas.width/2,
+    y: canvas.height-80,
+    size:22,
+    speed:5,
+    hp:3,
+    maxHp:5
+};
+let score = 0;
+let keys = {};
+let bullets = [];
+let enemies = [];
+let items = []; //道具数组
+let gameOver = false;
+let gameStarted = false;
+let powerUpActive = false;
+let powerUpTimer = null;
+let spawnTimer = null;
+
+//键盘监听
+window.addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
+window.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+
+//鼠标射击
+canvas.addEventListener("mousedown",e=>{
+    if(gameOver || !gameStarted) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const angle = Math.atan2(my - player.y, mx - player.x);
+    //强化状态：3发散弹
+    if(powerUpActive){
+        for(let offset of [-0.18,0,0.18]){
+            const ang = angle + offset;
+            bullets.push({
+                x:player.x,
+                y:player.y,
+                vx:Math.cos(ang)*12,
+                vy:Math.sin(ang)*12,
+                size:7
+            })
+        }
+    }else{
+        bullets.push({
+            x:player.x,
+            y:player.y,
+            vx:Math.cos(angle)*10,
+            vy:Math.sin(angle)*10,
+            size:5
+        })
+    }
+})
+
+//生成敌人
+function spawnEnemy(){
+    if(gameOver || !gameStarted) return;
+    enemies.push({
+        x: Math.random()*(canvas.width-40)+20,
+        y:-20,
+        size:18,
+        speed: 1.2 + Math.random()*1.5
+    })
+}
+
+//生成道具（敌人被击杀时有概率掉落）
+function spawnItem(x,y){
+    const r = Math.random();
+    let type = r>0.5 ? "heal" : "power";
+    items.push({
+        x:x,
+        y:y,
+        size:14,
+        speed:1.8,
+        type:type
+    })
+}
+
+//碰撞检测
+function circleCollision(a,b){
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    return dist < a.size + b.size;
+}
+
+//更新血条UI
+function updateHpUI(){
+    hpDom.textContent = player.hp;
+    const pct = (player.hp / player.maxHp) * 100;
+    hpBarDom.style.width = pct + "%";
+}
+
+function update(){
+    if(gameOver || !gameStarted) return;
+    //玩家移动
+    if(keys["w"] && player.y>player.size) player.y -= player.speed;
+    if(keys["s"] && player.y<canvas.height-player.size) player.y += player.speed;
+    if(keys["a"] && player.x>player.size) player.x -= player.speed;
+    if(keys["d"] && player.x<canvas.width-player.size) player.x += player.speed;
+
+    //更新子弹
+    for(let i=bullets.length-1;i>=0;i--){
+        const b = bullets[i];
+        b.x += b.vx;
+        b.y += b.vy;
+        if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height){
+            bullets.splice(i,1);
+        }
+    }
+
+    //更新道具
+    for(let i=items.length-1;i>=0;i--){
+        const it = items[i];
+        it.y += it.speed;
+        //玩家拾取道具
+        if(circleCollision(it,player)){
+            if(it.type === "heal"){
+                player.hp = Math.min(player.hp+1,player.maxHp);
+                updateHpUI();
+            }else if(it.type === "power"){
+                activatePowerUp();
+            }
+            items.splice(i,1);
+            continue;
+        }
+        if(it.y>canvas.height+20){
+            items.splice(i,1);
+        }
+    }
+
+    //更新敌人
+    for(let i=enemies.length-1;i>=0;i--){
+        const e = enemies[i];
+        e.y += e.speed;
+        //敌人撞到玩家
+        if(circleCollision(e,player)){
+            player.hp--;
+            updateHpUI();
+            enemies.splice(i,1);
+            checkGameOver();
+            continue;
+        }
+        //敌人跑到屏幕底部，成功逃走，扣血！
+        if(e.y>canvas.height+20){
+            player.hp--;
+            updateHpUI();
+            enemies.splice(i,1);
+            checkGameOver();
+            continue;
+        }
+        //子弹击中敌人
+        for(let j=bullets.length-1;j>=0;j--){
+            const b = bullets[j];
+            if(circleCollision(b,e)){
+                //击杀敌人，概率掉落道具
+                if(Math.random()>0.4){
+                    spawnItem(e.x,e.y);
+                }
+                enemies.splice(i,1);
+                bullets.splice(j,1);
+                score +=10;
+                scoreDom.textContent = score;
+                break;
+            }
+        }
+    }
+}
+
+//激活武器强化，持续5秒
+function activatePowerUp(){
+    if(powerUpTimer) clearTimeout(powerUpTimer);
+    powerUpActive = true;
+    buffDom.textContent = "⚡武器强化中！";
+    powerUpTimer = setTimeout(()=>{
+        powerUpActive = false;
+        buffDom.textContent = "";
+    },5000);
+}
+
+function checkGameOver(){
+    if(player.hp <=0){
+        gameOver=true;
+        clearInterval(spawnTimer);
+        finalScoreDom.innerText = score;
+        gameEndMask.style.display = "flex";
+    }
+}
+
+//绘制多边形飞船
+function drawPlayerShip(x,y,size){
+    ctx.save();
+    ctx.shadowColor="#38bdf8";
+    ctx.shadowBlur=20;
+    ctx.fillStyle="#38bdf8";
+    ctx.beginPath();
+    ctx.moveTo(x, y-size);
+    ctx.lineTo(x-size*0.8, y+size*0.7);
+    ctx.lineTo(x, y+size*0.3);
+    ctx.lineTo(x+size*0.8, y+size*0.7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.restore();
+}
+//绘制敌人飞船
+function drawEnemyShip(x,y,size){
+    ctx.save();
+    ctx.shadowColor="#a855f7";
+    ctx.shadowBlur=14;
+    ctx.fillStyle="#a855f7";
+    ctx.beginPath();
+    ctx.moveTo(x, y+size);
+    ctx.lineTo(x-size*0.75, y-size*0.6);
+    ctx.lineTo(x, y-size*0.2);
+    ctx.lineTo(x+size*0.75, y-size*0.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.restore();
+}
+
+function render(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    //星空网格背景
+    ctx.strokeStyle="#1e293b";
+    ctx.lineWidth=0.8;
+    for(let x=0;x<canvas.width;x+=40){
+        ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke();
+    }
+    for(let y=0;y<canvas.height;y+=40){
+        ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();
+    }
+
+    if(gameStarted){
+        drawPlayerShip(player.x,player.y,player.size);
+    }
+
+    //子弹
+    ctx.fillStyle="#fbbf24";
+    ctx.shadowColor="#fbbf24";
+    ctx.shadowBlur=10;
+    for(let b of bullets){
+        ctx.beginPath();
+        ctx.arc(b.x,b.y,b.size,0,Math.PI*2);
+        ctx.fill();
+    }
+    ctx.shadowBlur=0;
+
+    //敌人
+    for(let e of enemies){
+        drawEnemyShip(e.x,e.y,e.size);
+    }
+
+    //道具绘制
+    for(let it of items){
+        ctx.save();
+        if(it.type === "heal"){
+            ctx.fillStyle="#ef4444";
+            ctx.shadowColor="#ef4444";
+        }else{
+            ctx.fillStyle="#22d3ee";
+            ctx.shadowColor="#22d3ee";
+        }
+        ctx.shadowBlur=12;
+        ctx.beginPath();
+        ctx.arc(it.x,it.y,it.size,0,Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur=0;
+        ctx.restore();
+    }
+}
+
+function gameLoop(){
+    update();
+    render();
+    requestAnimationFrame(gameLoop);
+}
+
+//重置游戏逻辑
+function resetGame(){
+    player.x = canvas.width/2;
+    player.y = canvas.height-80;
+    player.hp =3;
+    score=0;
+    bullets=[];
+    enemies=[];
+    items=[];
+    gameOver=false;
+    powerUpActive=false;
+    buffDom.textContent="";
+    if(powerUpTimer) clearTimeout(powerUpTimer);
+    scoreDom.textContent = score;
+    updateHpUI();
+    clearInterval(spawnTimer);
+    spawnTimer = setInterval(spawnEnemy,1100);
+    gameEndMask.style.display = "none";
+}
+
+//开始游戏按钮
+startGameBtn.onclick = ()=>{
+    startMask.style.display = "none";
+    gameStarted = true;
+    resetGame();
+}
+endRestartBtn.onclick = resetGame;
+restartBtn.onclick = resetGame;
+
+gameLoop();
+</script>
+</body>
+</html>
